@@ -1,52 +1,56 @@
 #!/bin/bash
 
-LOG_FILE="network_test_log.txt"
+# Функция для установки недостающих пакетов
+install_packages() {
+    PACKAGES=("curl" "dnsutils" "mtr")
 
-# Функция для логирования сообщений
-log() {
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a $LOG_FILE
+    for PACKAGE in "${PACKAGES[@]}"; do
+        if ! dpkg -l | grep -qw $PACKAGE; then
+            echo "Установка пакета $PACKAGE..."
+            sudo apt-get install -y $PACKAGE
+        else
+            echo "Пакет $PACKAGE уже установлен."
+        fi
+    done
 }
 
-# Удаление старого speedtest и всех его репозиториев
-log "Удаление старого speedtest и всех его репозиториев..."
-sudo rm /etc/apt/sources.list.d/speedtest.list
+# Удаление старого и установка нового Speedtest CLI
+echo "Удаление старого Speedtest CLI и установка нового..."
+if [ -f /etc/apt/sources.list.d/speedtest.list ]; then
+    sudo rm /etc/apt/sources.list.d/speedtest.list
+fi
 sudo apt-get update
 sudo apt-get remove -y speedtest speedtest-cli
-log "Удаление завершено."
 
-# Установка необходимых инструментов
-log "Установка curl..."
+# Установка нового Speedtest CLI
 sudo apt-get install -y curl
-log "Установка curl завершена."
-
-# Установка нового speedtest
-log "Установка нового speedtest..."
 curl -s https://packagecloud.io/install/repositories/ookla/speedtest-cli/script.deb.sh | sudo bash
 sudo apt-get install -y speedtest
-log "Установка speedtest завершена."
 
-# Запуск теста без аргументов и запись результата в файл
-log "Запуск speedtest без аргументов..."
-speedtest | tee speedtest_default.txt | tee -a $LOG_FILE
-log "Тест без аргументов завершен. Результат сохранен в speedtest_default.txt."
+# Установка недостающих пакетов
+install_packages
 
-# Список серверов для тестирования
-servers=(62942 48192 62943 62945)
+# Проверка скорости интернета
+echo "Проверка скорости интернета..."
+speedtest
 
-# Запуск тестов для каждого сервера и запись результатов в файлы
-for server in "${servers[@]}"; do
-    log "Запуск speedtest для сервера $server..."
-    speedtest -s $server | tee speedtest_server_$server.txt | tee -a $LOG_FILE
-    log "Тест для сервера $server завершен. Результат сохранен в speedtest_server_$server.txt."
+# Проверка доступности DNS серверов
+DNS_SERVERS=("8.8.8.8" "8.8.4.4" "1.1.1.1")
+
+for DNS_SERVER in "${DNS_SERVERS[@]}"; do
+    echo "Проверка доступности DNS сервера $DNS_SERVER..."
+    dig @$DNS_SERVER google.com +short
+    if [ $? -eq 0 ]; then
+        echo "DNS сервер $DNS_SERVER доступен."
+    else
+        echo "DNS сервер $DNS_SERVER недоступен."
+    fi
 done
 
-# Выполнение трассировки до DNS серверов
-dns_servers=("1.1.1.1" "8.8.8.8")
+# Проверка качества соединения до нескольких локаций
+LOCATIONS=("google.com" "cloudflare.com" "yandex.ru")
 
-for dns in "${dns_servers[@]}"; do
-    log "Запуск трассировки до DNS сервера $dns..."
-    traceroute $dns | tee traceroute_$dns.txt | tee -a $LOG_FILE
-    log "Трассировка до DNS сервера $dns завершена. Результат сохранен в traceroute_$dns.txt."
+for LOCATION in "${LOCATIONS[@]}"; do
+    echo "Проверка качества соединения до $LOCATION..."
+    mtr -r -c 10 $LOCATION
 done
-
-log "Все тесты завершены. Результаты сохранены в соответствующих файлах."
