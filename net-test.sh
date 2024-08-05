@@ -2,7 +2,7 @@
 
 # Функция для установки недостающих пакетов
 install_packages() {
-    PACKAGES=("curl" "dnsutils" "mtr" "net-tools")
+    PACKAGES=("curl" "dnsutils" "mtr" "net-tools" "jq")
 
     for PACKAGE in "${PACKAGES[@]}"; do
         if ! dpkg -l | grep -qw $PACKAGE; then
@@ -48,7 +48,11 @@ echo "IP адреса: $IP_ADDRESSES"
 # Проверка скорости интернета
 print_separator
 echo "Проверка скорости интернета..."
-SPEEDTEST_OUTPUT=$(speedtest)
+SPEEDTEST_OUTPUT=$(speedtest --format=json)
+
+DOWNLOAD_SPEED=$(echo $SPEEDTEST_OUTPUT | jq '.download.bandwidth' | awk '{print $1/125000 " Mbps"}')
+UPLOAD_SPEED=$(echo $SPEEDTEST_OUTPUT | jq '.upload.bandwidth' | awk '{print $1/125000 " Mbps"}')
+PING=$(echo $SPEEDTEST_OUTPUT | jq '.ping.latency' | awk '{print $1 " ms"}')
 
 # Проверка доступности DNS серверов
 print_separator
@@ -76,6 +80,35 @@ for LOCATION in "${LOCATIONS[@]}"; do
     MTR_RESULTS+=("$MTR_RESULT")
 done
 
+# Проверка доступности популярных сервисов
+check_service_availability() {
+    SERVICE=$1
+    HOST=$2
+    nc -z -v -w5 $HOST 80 &> /dev/null
+    if [ $? -eq 0 ]; then
+        echo "$SERVICE доступен."
+    else
+        echo "$SERVICE недоступен."
+    fi
+}
+
+SERVICES=(
+    "Google:google.com"
+    "Facebook:facebook.com"
+    "YouTube:youtube.com"
+    "Amazon:amazon.com"
+    "Netflix:netflix.com"
+)
+
+SERVICE_RESULTS=()
+
+for SERVICE in "${SERVICES[@]}"; do
+    NAME=$(echo $SERVICE | cut -d':' -f1)
+    HOST=$(echo $SERVICE | cut -d':' -f2)
+    RESULT=$(check_service_availability $NAME $HOST)
+    SERVICE_RESULTS+=("$RESULT")
+done
+
 # Вывод резюме
 print_separator
 echo "Резюме диагностики сети"
@@ -83,16 +116,25 @@ print_separator
 echo "1. MTU: $MTU"
 echo "2. IP адреса: $IP_ADDRESSES"
 echo "3. Скорость интернета:"
-echo "$SPEEDTEST_OUTPUT"
+echo "   Download: $DOWNLOAD_SPEED"
+echo "   Upload: $UPLOAD_SPEED"
+echo "   Ping: $PING"
+print_separator
 echo "4. Доступность DNS серверов:"
 for RESULT in "${DNS_RESULTS[@]}"; do
-    echo "$RESULT"
+    echo "   $RESULT"
 done
+print_separator
 echo "5. Качество соединения до локаций:"
 for RESULT in "${MTR_RESULTS[@]}"; do
     echo "$RESULT"
     print_separator
 done
+echo "6. Доступность популярных сервисов:"
+for RESULT in "${SERVICE_RESULTS[@]}"; do
+    echo "   $RESULT"
+done
+print_separator
 
 # Дополнительные тесты и полезная информация
 
@@ -125,4 +167,3 @@ echo "$SS_OUTPUT"
 print_separator
 
 echo "Диагностика завершена."
-
