@@ -43,7 +43,7 @@ echo "IP адреса: $IP_ADDRESSES"
 # Проверка скорости интернета
 print_separator
 echo "Проверка скорости интернета..."
-SPEEDTEST_OUTPUT=$(./speedtest --accept-license --format=json)
+SPEEDTEST_OUTPUT=$(yes YES | ./speedtest --accept-license --format=json)
 
 DOWNLOAD_SPEED=$(echo $SPEEDTEST_OUTPUT | jq '.download.bandwidth' | awk '{print $1/125000 " Mbps"}')
 UPLOAD_SPEED=$(echo $SPEEDTEST_OUTPUT | jq '.upload.bandwidth' | awk '{print $1/125000 " Mbps"}')
